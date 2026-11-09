@@ -132,7 +132,11 @@ try {
     for (const { name, query } of queries) (results[name] ??= {})[variant] = await measure(query);
   }
   const report = Object.entries(results).map(([name, { baseline, treatment }]) => {
-    assert.deepEqual(treatment!.rows, baseline!.rows, `${name} returned different rows`);
+    // Run control's scoped read has no ORDER BY; its caller treats the rows as a
+    // set. Every other read promises its order, so compare it exactly.
+    const comparable = (rows: unknown[]) => name === "runControl.cancelBudgetScopeWork"
+      ? rows.map(row => JSON.stringify(row)).sort() : rows;
+    assert.deepEqual(comparable(treatment!.rows), comparable(baseline!.rows), `${name} returned different rows`);
     if (name !== "idleSleep.budget_cancellation") assert.ok(treatment!.nodes.some(node => node.includes(indexName)), `${name} did not use the index`);
     return { name, equalRows: baseline!.rows.length, baselineMs: baseline!.medianMs, baselineRangeMs: [baseline!.minMs, baseline!.maxMs],
       treatmentMs: treatment!.medianMs, treatmentRangeMs: [treatment!.minMs, treatment!.maxMs],
