@@ -3223,6 +3223,7 @@ export function heartbeatService(
         appendRunEvent, getCurrentUserRedactionOptions,
         assertWriterAuthority: createRunLogWriterAuthority(db, run, runOptions.nativeLeaseOwner),
         runtimeLogSecretValues: observabilitySecretValues(observability),
+        signal: executionControl.controller.signal,
       });
       const goalCheckpointSession: {
         current: {
