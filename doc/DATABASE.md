@@ -357,6 +357,22 @@ through the partial index `heartbeat_runs_tree_hold_suppression_idx`. The index
 covers only cancelled runs with a `treeHoldSuppression` marker, keyed by company and
 hold. Migration 0436 builds it concurrently.
 
+GitHub review lookups use four indexes from migration 0454, which builds them
+concurrently. `chat_message_links_company_comment_idx` finds a source comment's
+link for inherited review waits and run-origin checks.
+`chat_message_links_delivery_idx` finds a delivery's links.
+`chat_deliveries_github_automatic_delivery_idx` finds a delivery by its GitHub
+webhook delivery ID on one endpoint. These three are partial.
+`heartbeat_runs_company_wake_comment_idx` keys runs by company and
+`context_snapshot.wakeCommentId`. It is not partial, because the planner does not
+use expression statistics from a partial index; without them it estimates many
+matches and walks the run history by creation time instead. The review check
+reads the delivery's comment IDs first and then the newest same-agent run woken
+by one of them, so it no longer walks the agent's run history. The two link
+indexes also serve the comment and delivery `on delete set null` actions. Issue
+lists share one external review-wait read per issue between the review and
+blocked-inbox attention maps.
+
 The chat wake-notice sweep compares UUID columns directly against guarded,
 canonical lowercase UUID payload values. Malformed and noncanonical payloads
 still match nothing. The query can use existing primary keys without adding a
