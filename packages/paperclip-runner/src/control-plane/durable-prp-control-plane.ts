@@ -879,8 +879,15 @@ function eventSchemaIssuePaths(issues: readonly { path?: unknown }[] | undefined
 }
 
 function eventCommitFailureCause(error: unknown): string {
-  const code = isRecord(error) ? error.code : undefined;
-  if (typeof code === "string" && /^[A-Za-z0-9_.:-]{1,80}$/.test(code)) return code;
+  // Database and transport wrappers often keep the useful code on `cause`.
+  // Bound traversal (including cyclic causes) and never inspect messages,
+  // queries or parameters. An outer code retains precedence.
+  let current = error;
+  for (let depth = 0; depth < 4 && isRecord(current); depth += 1) {
+    const code = current.code;
+    if (typeof code === "string" && /^[A-Za-z0-9_.:-]{1,80}$/.test(code)) return code;
+    current = current.cause;
+  }
   const name = error instanceof Error ? error.name : typeof error;
   return /^[A-Za-z0-9_.:-]{1,80}$/.test(name) ? name : "unknown_error";
 }

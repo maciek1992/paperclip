@@ -47,6 +47,14 @@ column decoders, including the lossless payload codec. Callers still wait for
 the durable write before they publish or acknowledge the event. Native-source
 replay and retry-exhaustion deduplication retain their existing transaction path.
 
+When Runner event delivery stops with `runner_event_commit_stalled`, the error
+detail retains the first valid error code from at most four objects in the
+exception's `cause` chain. The outer code takes precedence. With no valid code,
+the existing outer error-name fallback applies. Exception messages, SQL and
+parameters are not copied. This diagnostic does not change event acknowledgement,
+retry limits or the replay integrity checks. A later successful continuation does
+not establish the cause of an earlier failure that recorded only `Error`.
+
 ## Legacy case handoff cleanup
 
 `legacy.case_handoff_cleanup_intent` records local cleanup ownership before

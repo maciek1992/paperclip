@@ -1497,10 +1497,18 @@ it.each([
   }
 });
 
-it("fails closed when runner events keep failing to commit without progress", async () => {
+it.each([
+  { label: "direct code", error: Object.assign(new Error("connection reset by private-host-fixture"), { code: "ECONNRESET" }), code: "ECONNRESET" },
+  { label: "wrapped database code", error: new Error("private SQL and parameters", { cause: Object.assign(new Error("private-host-fixture"), { code: "40001" }) }), code: "40001" },
+  { label: "nested transport code", error: new Error("private SQL", { cause: new Error("private query", { cause: Object.assign(new Error("private-host-fixture"), { code: "ECONNRESET" }) }) }), code: "ECONNRESET" },
+  { label: "outer code precedence", error: Object.assign(new Error("private SQL", { cause: { code: "40001" } }), { code: "EIO" }), code: "EIO" },
+  { label: "invalid nested code", error: new Error("private SQL", { cause: { code: "private SQL and parameters" } }), code: "Error" },
+  { label: "cyclic cause", error: (() => { const error = new Error("private SQL"); error.cause = error; return error; })(), code: "Error" },
+  { label: "bounded cause depth", error: new Error("private SQL", { cause: { cause: { cause: { cause: { code: "EIO" } } } } }), code: "Error" },
+])("fails closed with the $label when runner commits stall", async ({ error, code }) => {
   const root = mkdtempSync(resolve(tmpdir(), "runner-event-delivery-stall-"));
   const commits = vi.fn(async () => {
-    throw Object.assign(new Error("connection reset by private-host-fixture"), { code: "ECONNRESET" });
+    throw error;
   });
   const onProtocolIntegrityError = vi.fn();
   const core = new DurablePrpControlPlane({ stateDirectory: root, identity,
@@ -1529,7 +1537,10 @@ it("fails closed when runner events keep failing to commit without progress", as
     }
     expect(onProtocolIntegrityError).toHaveBeenCalledOnce();
     const failure = onProtocolIntegrityError.mock.calls[0]![0] as Error;
-    expect(failure).toMatchObject({ reason: "runner_event_commit_stalled", detail: "ECONNRESET at source seq 1" });
+    expect(failure).toMatchObject({ reason: "runner_event_commit_stalled", detail: `${code} at source seq 1` });
+    expect(core.store.state.ackedSourceSeq).toBe(0);
+    expect(core.store.state.committedEvents).toHaveLength(0);
+    expect(failure.message).not.toContain("private SQL");
     expect(failure.message).toContain("runner_event_commit_stalled");
     expect(failure.message).not.toContain("private-host-fixture");
   } finally {
